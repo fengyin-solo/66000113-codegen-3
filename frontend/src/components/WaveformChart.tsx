@@ -108,19 +108,22 @@ const computeCorrelation = (targetChannel: string, eegData: EEGData): Correlatio
 
 export const WaveformChart: React.FC = () => {
   const {
-    eegData, selectedChannel, setEEGData, setBandPower, setBrainState, setCorrelationData,
-    isRecording, addRecordingFrame, playbackMode,
+    eegData, selectedChannel, setEEGData, setBandPower, setBrainState, setBrainStateChannel, setCorrelationData,
+    isRecording, addRecordingFrame, playbackMode, liveTrendRetryToken,
   } = useEEGStore();
   const [loading, setLoading] = useState(false);
   const intervalRef = useRef<number | null>(null);
+  const requestSequenceRef = useRef(0);
 
   const fetchEEG = async () => {
     const state = useEEGStore.getState();
     if (state.playbackMode) return;
+    const requestSequence = ++requestSequenceRef.current;
+    const requestedChannel = state.selectedChannel;
     setLoading(true);
     let eeg: EEGData, bands: BandPower, brainState: BrainState, correlation: CorrelationData;
     try {
-      const { data } = await axios.get(`/api/eeg/sample/${state.selectedChannel}?duration=3`);
+      const { data } = await axios.get(`/api/eeg/sample/${requestedChannel}?duration=3`);
       eeg = data.eeg;
       bands = data.bands;
       brainState = data.brainState;
@@ -129,14 +132,23 @@ export const WaveformChart: React.FC = () => {
       eeg = generateMockEEG(3);
       bands = computeBandPower();
       brainState = computeBrainState(bands);
-      correlation = computeCorrelation(state.selectedChannel, eeg);
+      correlation = computeCorrelation(requestedChannel, eeg);
     }
-    state.setEEGData(eeg);
-    state.setBandPower(bands);
-    state.setBrainState(brainState);
-    state.setCorrelationData(correlation);
-    if (state.isRecording) {
-      state.addRecordingFrame(eeg, bands, brainState, correlation);
+    const latestState = useEEGStore.getState();
+    if (
+      latestState.playbackMode ||
+      latestState.selectedChannel !== requestedChannel ||
+      requestSequence !== requestSequenceRef.current
+    ) {
+      return;
+    }
+    latestState.setEEGData(eeg);
+    latestState.setBandPower(bands);
+    latestState.setBrainState(brainState);
+    latestState.setBrainStateChannel(requestedChannel);
+    latestState.setCorrelationData(correlation);
+    if (latestState.isRecording) {
+      latestState.addRecordingFrame(eeg, bands, brainState, correlation);
     }
     setLoading(false);
   };
@@ -154,7 +166,7 @@ export const WaveformChart: React.FC = () => {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [selectedChannel, playbackMode]);
+  }, [selectedChannel, playbackMode, liveTrendRetryToken]);
 
   const chartData = eegData?.data[selectedChannel]?.map((v: number, i: number) => ({
     t: eegData.time[i]?.toFixed(3), value: v.toFixed(4)
