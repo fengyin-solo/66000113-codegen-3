@@ -8,6 +8,25 @@ export interface BrainState {
   statusLabel: string;
   statusColor: string;
   timestamp: number;
+  channel?: string;
+}
+
+export type TrendWindowKey = '30s' | '60s' | '180s' | 'all';
+
+export interface TrendPoint {
+  t: number;
+  focus: number;
+  relaxation: number;
+  fatigue: number;
+  abnormal: boolean;
+  reasons: string[];
+}
+
+export interface AnomalySegment {
+  start: number;
+  end: number;
+  kind: string;
+  reasons: string[];
 }
 export interface ChannelCorrelation {
   channel: string;

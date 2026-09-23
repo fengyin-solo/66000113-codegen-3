@@ -119,22 +119,30 @@ export const WaveformChart: React.FC = () => {
     if (state.playbackMode) return;
     setLoading(true);
     let eeg: EEGData, bands: BandPower, brainState: BrainState, correlation: CorrelationData;
+    const channel = state.selectedChannel;
     try {
-      const { data } = await axios.get(`/api/eeg/sample/${state.selectedChannel}?duration=3`);
+      const { data } = await axios.get(`/api/eeg/sample/${channel}?duration=3`);
       eeg = data.eeg;
       bands = data.bands;
-      brainState = data.brainState;
+      brainState = { ...data.brainState, channel: data.channel || channel };
       correlation = data.correlation;
     } catch {
       eeg = generateMockEEG(3);
       bands = computeBandPower();
-      brainState = computeBrainState(bands);
-      correlation = computeCorrelation(state.selectedChannel, eeg);
+      brainState = { ...computeBrainState(bands), channel };
+      correlation = computeCorrelation(channel, eeg);
+    }
+    // 仅当请求期间用户未再切换通道时才覆盖实时视图（趋势历史按通道归属，不受影响）
+    if (useEEGStore.getState().selectedChannel !== channel || useEEGStore.getState().playbackMode) {
+      state.appendTrendPoint(brainState);
+      setLoading(false);
+      return;
     }
     state.setEEGData(eeg);
     state.setBandPower(bands);
     state.setBrainState(brainState);
     state.setCorrelationData(correlation);
+    state.appendTrendPoint(brainState);
     if (state.isRecording) {
       state.addRecordingFrame(eeg, bands, brainState, correlation);
     }

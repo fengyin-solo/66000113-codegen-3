@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { EEGData, BandPower, BrainState, CorrelationData, Recording, RecordingFrame, PlaybackState } from '../types';
 
 const STORAGE_KEY = 'eeg_recordings';
+const TREND_MAX_POINTS = 400;
 
 const loadRecordings = (): Recording[] => {
   try {
@@ -25,6 +26,7 @@ interface EEGState {
   isStreaming: boolean;
   brainState: BrainState | null;
   correlationData: CorrelationData | null;
+  trendHistory: Record<string, BrainState[]>;
   isRecording: boolean;
   recordingStartTime: number;
   currentRecordingFrames: RecordingFrame[];
@@ -37,6 +39,8 @@ interface EEGState {
   setBandPower: (b: BandPower | null) => void;
   setStreaming: (v: boolean) => void;
   setBrainState: (s: BrainState | null) => void;
+  appendTrendPoint: (s: BrainState) => void;
+  clearChannelTrend: (channel: string) => void;
   setCorrelationData: (c: CorrelationData | null) => void;
   startRecording: () => void;
   stopRecording: (name: string) => void;
@@ -56,6 +60,7 @@ export const useEEGStore = create<EEGState>((set, get) => ({
   isStreaming: false,
   brainState: null,
   correlationData: null,
+  trendHistory: {},
   isRecording: false,
   recordingStartTime: 0,
   currentRecordingFrames: [],
@@ -72,6 +77,23 @@ export const useEEGStore = create<EEGState>((set, get) => ({
   setBandPower: (b) => set({ bandPower: b }),
   setStreaming: (v) => set({ isStreaming: v }),
   setBrainState: (s) => set({ brainState: s }),
+  appendTrendPoint: (s) => {
+    if (!s || typeof s.timestamp !== 'number') return;
+    const { trendHistory } = get();
+    const channel = s.channel || get().selectedChannel;
+    const prev = trendHistory[channel] || [];
+    if (prev.length > 0 && prev[prev.length - 1].timestamp === s.timestamp) return;
+    const next = [...prev, s];
+    if (next.length > TREND_MAX_POINTS) next.splice(0, next.length - TREND_MAX_POINTS);
+    set({ trendHistory: { ...trendHistory, [channel]: next } });
+  },
+  clearChannelTrend: (channel) => {
+    const { trendHistory } = get();
+    if (!trendHistory[channel]) return;
+    const next = { ...trendHistory };
+    delete next[channel];
+    set({ trendHistory: next });
+  },
   setCorrelationData: (c) => set({ correlationData: c }),
   startRecording: () => {
     const { selectedChannel } = get();
